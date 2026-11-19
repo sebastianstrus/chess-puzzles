@@ -15,9 +15,13 @@ PAGES_LIMIT = 1_000_000_000
 
 def render(source, destination):
     with Image.open(source) as original:
-        image = ImageOps.exif_transpose(original).convert("RGB")
-        image.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
-        image.save(destination, "JPEG", quality=86, optimize=True)
+        if (original.format == "JPEG" and original.mode == "RGB"
+                and max(original.size) <= MAX_SIDE and original.getexif().get(274, 1) == 1):
+            shutil.copyfile(source, destination)
+        else:
+            image = ImageOps.exif_transpose(original).convert("RGB")
+            image.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
+            image.save(destination, "JPEG", quality=86, optimize=True)
     return destination.stat().st_size
 
 
