@@ -1,0 +1,52 @@
+name: Publish Chess Puzzle Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'white_mate_in_2/**'
+      - 'white_mate_in_3/**'
+      - 'black_mate_in_3/**'
+      - '.github/render_puzzles.py'
+      - '.github/workflows/publish-puzzles.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chess-puzzle-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image library
+        run: python -m pip install Pillow==12.2.0
+      - name: Resize puzzle copies
+        run: python .github/render_puzzles.py . _site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
