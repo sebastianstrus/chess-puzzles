@@ -1,4 +1,4 @@
-name: Publish Chess Puzzle Images
+name: Publish Chess Puzzle Media
 
 on:
   push:
@@ -7,8 +7,13 @@ on:
       - 'white_mate_in_2/**'
       - 'white_mate_in_3/**'
       - 'black_mate_in_3/**'
+      - 'puzzle_reels_images/**'
       - '.github/render_puzzles.py'
+      - '.github/render_reels.py'
+      - '.github/reel-audio/**'
       - '.github/workflows/publish-puzzles.yml'
+  schedule:
+    - cron: '17 1 * * *'
   workflow_dispatch:
 
 permissions:
@@ -26,13 +31,42 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          sparse-checkout: .github
+      - name: Identify photo inputs
+        id: photos
+        run: |
+          signature=$(git rev-parse HEAD:white_mate_in_2 HEAD:white_mate_in_3 HEAD:black_mate_in_3 HEAD:.github/render_puzzles.py | sha256sum | cut -d ' ' -f 1)
+          echo "signature=$signature" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: photo-cache
+        with:
+          path: |
+            _site/white_mate_in_2
+            _site/white_mate_in_3
+            _site/black_mate_in_3
+          key: photos-v1-${{ steps.photos.outputs.signature }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install image library
-        run: python -m pip install Pillow==12.2.0
       - name: Resize puzzle copies
-        run: python .github/render_puzzles.py . _site
+        if: steps.photo-cache.outputs.cache-hit != 'true'
+        run: |
+          git sparse-checkout add white_mate_in_2 white_mate_in_3 black_mate_in_3
+          python -m pip install Pillow==12.2.0
+          python .github/render_puzzles.py . _site
+      - name: Render Reels with narration and music
+        env:
+          REELS_START: ${{ vars.PUZZLE_REELS_START_DATE }}
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          args=()
+          if [[ -n "$REELS_START" ]]; then
+            args+=(--start "$REELS_START")
+          fi
+          python .github/render_reels.py "$GITHUB_SHA" _site "${args[@]}"
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
